@@ -16,12 +16,14 @@ const client = new Client({
   ]
 });
 
-// ====== CONFIG ======
-const TICKET_CATEGORY = '1470459472253026315';
+// ===== CONFIG =====
+const CATEGORY_ID = '1470459472253026315';
 const LOG_CHANNEL = '1470921582217007216';
 const STAFF_ROLE = '1472068480932118591';
 const PANEL_CHANNEL = '1470460038266224731';
-// =====================
+// ===================
+
+let ticketCounter = 1;
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -29,16 +31,26 @@ client.once('ready', async () => {
   const panelChannel = await client.channels.fetch(PANEL_CHANNEL);
 
   const embed = new EmbedBuilder()
-    .setTitle('🎫 Support Tickets')
-    .setDescription('Click the button below to open a ticket.')
-    .setColor('Blue');
+    .setTitle('💱 Exchange Service')
+    .setDescription('Select your exchange type below.')
+    .setColor('Green');
 
-  const openBtn = new ButtonBuilder()
-    .setCustomId('open_ticket')
-    .setLabel('Open Ticket')
-    .setStyle(ButtonStyle.Primary);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('cashapp')
+      .setLabel('CashApp')
+      .setStyle(ButtonStyle.Success),
 
-  const row = new ActionRowBuilder().addComponents(openBtn);
+    new ButtonBuilder()
+      .setCustomId('paypal')
+      .setLabel('PayPal')
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId('crypto')
+      .setLabel('Crypto')
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   await panelChannel.send({ embeds: [embed], components: [row] });
 });
@@ -48,23 +60,23 @@ client.on('interactionCreate', async interaction => {
 
   const logs = await client.channels.fetch(LOG_CHANNEL);
 
-  // ================= OPEN TICKET =================
-  if (interaction.customId === 'open_ticket') {
+  // ===== OPEN EXCHANGE =====
+  if (['cashapp', 'paypal', 'crypto'].includes(interaction.customId)) {
 
     const existing = interaction.guild.channels.cache.find(
-      ch => ch.name === `ticket-${interaction.user.id}`
+      ch => ch.name.includes(interaction.user.id)
     );
 
     if (existing)
-      return interaction.reply({
-        content: '❌ You already have an open ticket!',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ You already have an open exchange!', ephemeral: true });
+
+    const number = String(ticketCounter++).padStart(3, '0');
 
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`,
+      name: `exchange-${number}`,
       type: 0,
-      parent: TICKET_CATEGORY,
+      parent: CATEGORY_ID,
+      topic: `User: ${interaction.user.id}`,
       permissionOverwrites: [
         {
           id: interaction.guild.id,
@@ -72,88 +84,77 @@ client.on('interactionCreate', async interaction => {
         },
         {
           id: interaction.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
         },
         {
           id: STAFF_ROLE,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
         }
       ]
     });
 
-    const claimBtn = new ButtonBuilder()
-      .setCustomId('claim_ticket')
-      .setLabel('Claim')
-      .setStyle(ButtonStyle.Success);
+    const infoEmbed = new EmbedBuilder()
+      .setTitle(`💱 ${interaction.customId.toUpperCase()} Exchange`)
+      .setDescription(`
+Please fill out the format below:
 
-    const closeBtn = new ButtonBuilder()
-      .setCustomId('close_ticket')
-      .setLabel('Close')
-      .setStyle(ButtonStyle.Danger);
+Amount:
+From:
+To:
+Rate Agreed:
+Proof Screenshot:
+      `)
+      .setColor('Blue');
 
-    const row = new ActionRowBuilder().addComponents(claimBtn, closeBtn);
+    const controlRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('claim')
+        .setLabel('Claim')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('close')
+        .setLabel('Close')
+        .setStyle(ButtonStyle.Danger)
+    );
 
     await channel.send({
-      content: `🎫 ${interaction.user} | A staff member will assist you shortly.`,
-      components: [row]
+      content: `<@&${STAFF_ROLE}> New exchange opened by ${interaction.user}`,
+      embeds: [infoEmbed],
+      components: [controlRow]
     });
 
-    await logs.send(`📂 Ticket Opened by ${interaction.user.tag}`);
+    await logs.send(`📂 Exchange ${channel.name} opened by ${interaction.user.tag}`);
 
-    await interaction.reply({
-      content: `✅ Ticket created: ${channel}`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `✅ Exchange created: ${channel}`, ephemeral: true });
   }
 
-  // ================= CLAIM =================
-  if (interaction.customId === 'claim_ticket') {
+  // ===== CLAIM =====
+  if (interaction.customId === 'claim') {
 
     if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({
-        content: '❌ Only staff can claim tickets.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
 
-    if (interaction.channel.topic)
-      return interaction.reply({
-        content: '❌ This ticket has already been claimed.',
-        ephemeral: true
-      });
+    if (interaction.channel.name.includes('-claimed'))
+      return interaction.reply({ content: '❌ Already claimed.', ephemeral: true });
 
-    await interaction.channel.setTopic(`Claimed by ${interaction.user.tag}`);
+    await interaction.channel.setName(`${interaction.channel.name}-claimed`);
 
-    await interaction.reply({
-      content: `👮 Ticket claimed by ${interaction.user}`,
-      ephemeral: false
-    });
+    await interaction.reply({ content: `👮 Claimed by ${interaction.user}` });
 
-    await logs.send(`📝 Ticket claimed by ${interaction.user.tag}`);
+    await logs.send(`📝 ${interaction.channel.name} claimed by ${interaction.user.tag}`);
   }
 
-  // ================= CLOSE =================
-  if (interaction.customId === 'close_ticket') {
+  // ===== CLOSE =====
+  if (interaction.customId === 'close') {
 
     if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({
-        content: '❌ Only staff can close tickets.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
 
-    await interaction.reply({
-      content: '🔒 Saving transcript...',
-      ephemeral: true
-    });
+    await interaction.reply({ content: '🔒 Closing & saving transcript...', ephemeral: true });
 
     let transcript = `Transcript for ${interaction.channel.name}\n\n`;
-
     let lastId;
+
     while (true) {
       const options = { limit: 100 };
       if (lastId) options.before = lastId;
@@ -172,17 +173,14 @@ client.on('interactionCreate', async interaction => {
       content: `📁 Transcript from ${interaction.channel.name}`,
       files: [{
         attachment: Buffer.from(transcript, 'utf-8'),
-        name: `${interaction.channel.name}-transcript.txt`
+        name: `${interaction.channel.name}.txt`
       }]
     });
 
-    await logs.send(`🔒 Ticket closed by ${interaction.user.tag}`);
+    await logs.send(`🔒 ${interaction.channel.name} closed by ${interaction.user.tag}`);
 
-    setTimeout(() => {
-      interaction.channel.delete();
-    }, 3000);
+    setTimeout(() => interaction.channel.delete(), 3000);
   }
-
 });
 
 client.login(process.env.TOKEN);
