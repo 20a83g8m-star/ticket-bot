@@ -2,7 +2,7 @@ module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
 
-    // Slash Commands
+    // ===== SLASH COMMANDS =====
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
 
@@ -12,14 +12,25 @@ module.exports = {
         await command.execute(interaction, client);
       } catch (error) {
         console.error(error);
-        await interaction.reply({ content: 'Error executing command.', ephemeral: true });
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: 'Error executing command.', ephemeral: true });
+        } else {
+          await interaction.reply({ content: 'Error executing command.', ephemeral: true });
+        }
       }
     }
 
-    // Buttons & Modals (handled in ticketManager later)
+    // ===== BUTTONS & MODALS =====
     if (interaction.isButton() || interaction.isModalSubmit()) {
+
+      // Handle Rating First
+      const ratingSystem = require('../utils/ratingSystem');
+      const handled = ratingSystem.handleRating(interaction);
+      if (handled) return;
+
+      // Then Handle Tickets
       const ticketManager = require('../utils/ticketManager');
-      ticketManager.handleInteraction(interaction, client);
+      await ticketManager.handleInteraction(interaction, client);
     }
   }
 };
