@@ -19,5 +19,16 @@ function save() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-module.exports = data;
-module.exports.save = save;
+module.exports = {
+  get counter() { return data.counter; },
+  set counter(val) { data.counter = val; },
+
+  get totalVolume() { return data.totalVolume; },
+  set totalVolume(val) { data.totalVolume = val; },
+
+  get totalProfit() { return data.totalProfit; },
+  set totalProfit(val) { data.totalProfit = val; },
+
+  staffStats: data.staffStats,
+  save
+};
