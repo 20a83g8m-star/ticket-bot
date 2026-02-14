@@ -20,17 +20,17 @@ const client = new Client({
 const TICKET_CATEGORY = '1470459472253026315';
 const LOG_CHANNEL = '1470921582217007216';
 const STAFF_ROLE = '1472068480932118591';
-const PANEL_CHANNEL = '1470460038266224731'; // your panel channel
+const PANEL_CHANNEL = '1470460038266224731';
 // =====================
 
 client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  const channel = await client.channels.fetch(PANEL_CHANNEL);
+  const panelChannel = await client.channels.fetch(PANEL_CHANNEL);
 
   const embed = new EmbedBuilder()
     .setTitle('🎫 Support Tickets')
-    .setDescription('Click below to open a ticket.')
+    .setDescription('Click the button below to open a ticket.')
     .setColor('Blue');
 
   const openBtn = new ButtonBuilder()
@@ -40,7 +40,7 @@ client.once('ready', async () => {
 
   const row = new ActionRowBuilder().addComponents(openBtn);
 
-  await channel.send({ embeds: [embed], components: [row] });
+  await panelChannel.send({ embeds: [embed], components: [row] });
 });
 
 client.on('interactionCreate', async interaction => {
@@ -48,7 +48,7 @@ client.on('interactionCreate', async interaction => {
 
   const logs = await client.channels.fetch(LOG_CHANNEL);
 
-  // ===== OPEN TICKET =====
+  // ================= OPEN TICKET =================
   if (interaction.customId === 'open_ticket') {
 
     const existing = interaction.guild.channels.cache.find(
@@ -56,7 +56,10 @@ client.on('interactionCreate', async interaction => {
     );
 
     if (existing)
-      return interaction.reply({ content: '❌ You already have a ticket open!', ephemeral: true });
+      return interaction.reply({
+        content: '❌ You already have an open ticket!',
+        ephemeral: true
+      });
 
     const channel = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.id}`,
@@ -69,11 +72,17 @@ client.on('interactionCreate', async interaction => {
         },
         {
           id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
         },
         {
           id: STAFF_ROLE,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
         }
       ]
     });
@@ -91,43 +100,73 @@ client.on('interactionCreate', async interaction => {
     const row = new ActionRowBuilder().addComponents(claimBtn, closeBtn);
 
     await channel.send({
-      content: `🎫 ${interaction.user} | Staff will assist you shortly.`,
+      content: `🎫 ${interaction.user} | A staff member will assist you shortly.`,
       components: [row]
     });
 
     await logs.send(`📂 Ticket Opened by ${interaction.user.tag}`);
 
-    await interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+    await interaction.reply({
+      content: `✅ Ticket created: ${channel}`,
+      ephemeral: true
+    });
   }
 
-  // ===== CLAIM =====
+  // ================= CLAIM =================
   if (interaction.customId === 'claim_ticket') {
 
     if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({ content: '❌ Only staff can claim tickets.', ephemeral: true });
+      return interaction.reply({
+        content: '❌ Only staff can claim tickets.',
+        ephemeral: true
+      });
 
     if (interaction.channel.topic)
-      return interaction.reply({ content: '❌ Ticket already claimed!', ephemeral: true });
+      return interaction.reply({
+        content: '❌ This ticket has already been claimed.',
+        ephemeral: true
+      });
 
     await interaction.channel.setTopic(`Claimed by ${interaction.user.tag}`);
 
-    await interaction.reply({ content: `👮 Ticket claimed by ${interaction.user}`, ephemeral: false });
+    await interaction.reply({
+      content: `👮 Ticket claimed by ${interaction.user}`,
+      ephemeral: false
+    });
 
     await logs.send(`📝 Ticket claimed by ${interaction.user.tag}`);
   }
 
-  // ===== CLOSE =====
+  // ================= CLOSE =================
   if (interaction.customId === 'close_ticket') {
 
     if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({ content: '❌ Only staff can close tickets.', ephemeral: true });
+      return interaction.reply({
+        content: '❌ Only staff can close tickets.',
+        ephemeral: true
+      });
 
-    await interaction.reply({ content: '🔒 Closing ticket & saving transcript...', ephemeral: true });
+    await interaction.reply({
+      content: '🔒 Saving transcript...',
+      ephemeral: true
+    });
 
-    const messages = await interaction.channel.messages.fetch({ limit: 100 });
-    const transcript = messages.reverse().map(m => 
-      `[${m.author.tag}] ${m.content}`
-    ).join('\n');
+    let transcript = `Transcript for ${interaction.channel.name}\n\n`;
+
+    let lastId;
+    while (true) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+
+      const messages = await interaction.channel.messages.fetch(options);
+      if (messages.size === 0) break;
+
+      messages.forEach(msg => {
+        transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content || "[Embed/Attachment]"}\n`;
+      });
+
+      lastId = messages.last().id;
+    }
 
     await logs.send({
       content: `📁 Transcript from ${interaction.channel.name}`,
