@@ -5,14 +5,16 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require('discord.js');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.GuildMessages
   ]
 });
 
@@ -31,24 +33,28 @@ client.once('ready', async () => {
   const panelChannel = await client.channels.fetch(PANEL_CHANNEL);
 
   const embed = new EmbedBuilder()
-    .setTitle('💱 Exchange Service')
-    .setDescription('Select your exchange type below.')
+    .setTitle('💱 Official Exchange Service')
+    .setDescription(`
+Please choose your exchange type below.
+
+⚠️ Do NOT send funds until instructed.
+⚠️ Only trust official staff.
+⚠️ Provide valid proof.
+    `)
     .setColor('Green');
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('cashapp')
-      .setLabel('CashApp')
+      .setLabel('CashApp Exchange')
       .setStyle(ButtonStyle.Success),
-
     new ButtonBuilder()
       .setCustomId('paypal')
-      .setLabel('PayPal')
+      .setLabel('PayPal Exchange')
       .setStyle(ButtonStyle.Primary),
-
     new ButtonBuilder()
       .setCustomId('crypto')
-      .setLabel('Crypto')
+      .setLabel('Crypto Exchange')
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -56,19 +62,59 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton()) return;
 
-  const logs = await client.channels.fetch(LOG_CHANNEL);
+  // ===== BUTTON → SHOW FORM =====
+  if (interaction.isButton()) {
 
-  // ===== OPEN EXCHANGE =====
-  if (['cashapp', 'paypal', 'crypto'].includes(interaction.customId)) {
+    if (!['cashapp','paypal','crypto'].includes(interaction.customId)) return;
 
-    const existing = interaction.guild.channels.cache.find(
-      ch => ch.name.includes(interaction.user.id)
+    const modal = new ModalBuilder()
+      .setCustomId(`form_${interaction.customId}`)
+      .setTitle('Exchange Details');
+
+    const amount = new TextInputBuilder()
+      .setCustomId('amount')
+      .setLabel('Exchange Amount')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const from = new TextInputBuilder()
+      .setCustomId('from')
+      .setLabel('From Payment Method')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const to = new TextInputBuilder()
+      .setCustomId('to')
+      .setLabel('To Payment Method')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const rate = new TextInputBuilder()
+      .setCustomId('rate')
+      .setLabel('Agreed Rate')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(amount),
+      new ActionRowBuilder().addComponents(from),
+      new ActionRowBuilder().addComponents(to),
+      new ActionRowBuilder().addComponents(rate)
     );
 
-    if (existing)
-      return interaction.reply({ content: '❌ You already have an open exchange!', ephemeral: true });
+    await interaction.showModal(modal);
+  }
+
+  // ===== FORM SUBMIT =====
+  if (interaction.isModalSubmit()) {
+
+    const type = interaction.customId.split('_')[1];
+
+    const amount = interaction.fields.getTextInputValue('amount');
+    const from = interaction.fields.getTextInputValue('from');
+    const to = interaction.fields.getTextInputValue('to');
+    const rate = interaction.fields.getTextInputValue('rate');
 
     const number = String(ticketCounter++).padStart(3, '0');
 
@@ -76,7 +122,6 @@ client.on('interactionCreate', async interaction => {
       name: `exchange-${number}`,
       type: 0,
       parent: CATEGORY_ID,
-      topic: `User: ${interaction.user.id}`,
       permissionOverwrites: [
         {
           id: interaction.guild.id,
@@ -93,17 +138,14 @@ client.on('interactionCreate', async interaction => {
       ]
     });
 
-    const infoEmbed = new EmbedBuilder()
-      .setTitle(`💱 ${interaction.customId.toUpperCase()} Exchange`)
-      .setDescription(`
-Please fill out the format below:
-
-Amount:
-From:
-To:
-Rate Agreed:
-Proof Screenshot:
-      `)
+    const embed = new EmbedBuilder()
+      .setTitle(`💱 ${type.toUpperCase()} Exchange`)
+      .addFields(
+        { name: 'Amount', value: amount },
+        { name: 'From', value: from },
+        { name: 'To', value: to },
+        { name: 'Rate', value: rate }
+      )
       .setColor('Blue');
 
     const controlRow = new ActionRowBuilder().addComponents(
@@ -118,69 +160,17 @@ Proof Screenshot:
     );
 
     await channel.send({
-      content: `<@&${STAFF_ROLE}> New exchange opened by ${interaction.user}`,
-      embeds: [infoEmbed],
+      content: `<@&${STAFF_ROLE}> New exchange from ${interaction.user}`,
+      embeds: [embed],
       components: [controlRow]
     });
 
-    await logs.send(`📂 Exchange ${channel.name} opened by ${interaction.user.tag}`);
-
-    await interaction.reply({ content: `✅ Exchange created: ${channel}`, ephemeral: true });
-  }
-
-  // ===== CLAIM =====
-  if (interaction.customId === 'claim') {
-
-    if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
-
-    if (interaction.channel.name.includes('-claimed'))
-      return interaction.reply({ content: '❌ Already claimed.', ephemeral: true });
-
-    await interaction.channel.setName(`${interaction.channel.name}-claimed`);
-
-    await interaction.reply({ content: `👮 Claimed by ${interaction.user}` });
-
-    await logs.send(`📝 ${interaction.channel.name} claimed by ${interaction.user.tag}`);
-  }
-
-  // ===== CLOSE =====
-  if (interaction.customId === 'close') {
-
-    if (!interaction.member.roles.cache.has(STAFF_ROLE))
-      return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
-
-    await interaction.reply({ content: '🔒 Closing & saving transcript...', ephemeral: true });
-
-    let transcript = `Transcript for ${interaction.channel.name}\n\n`;
-    let lastId;
-
-    while (true) {
-      const options = { limit: 100 };
-      if (lastId) options.before = lastId;
-
-      const messages = await interaction.channel.messages.fetch(options);
-      if (messages.size === 0) break;
-
-      messages.forEach(msg => {
-        transcript += `[${msg.createdAt.toLocaleString()}] ${msg.author.tag}: ${msg.content || "[Embed/Attachment]"}\n`;
-      });
-
-      lastId = messages.last().id;
-    }
-
-    await logs.send({
-      content: `📁 Transcript from ${interaction.channel.name}`,
-      files: [{
-        attachment: Buffer.from(transcript, 'utf-8'),
-        name: `${interaction.channel.name}.txt`
-      }]
+    await interaction.reply({
+      content: `✅ Exchange created: ${channel}`,
+      ephemeral: true
     });
-
-    await logs.send(`🔒 ${interaction.channel.name} closed by ${interaction.user.tag}`);
-
-    setTimeout(() => interaction.channel.delete(), 3000);
   }
+
 });
 
 client.login(process.env.TOKEN);
