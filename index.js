@@ -42,11 +42,9 @@ if (fs.existsSync('./events')) {
 }
 
 
-// 🔥 When Bot Is Ready
-client.once('ready', async () => {
+// 🔥 READY EVENT (UPDATED)
+client.once('clientReady', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
-
-    // 🚀 Start Daily Leaderboard
     startDailyLeaderboard(client);
 });
 
