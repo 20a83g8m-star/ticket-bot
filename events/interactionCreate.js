@@ -5,7 +5,10 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder
+    EmbedBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 
 const TICKET_CATEGORY_ID = "1470459472253026315";
@@ -18,30 +21,68 @@ module.exports = {
 
         try {
 
-            /* =========================
-               SLASH COMMANDS
-            ========================== */
+            /* ================= SLASH ================= */
             if (interaction.isChatInputCommand()) {
                 const command = client.commands.get(interaction.commandName);
                 if (!command) return;
-
                 await command.execute(interaction, client);
                 return;
             }
 
-            /* =========================
-               BUTTONS
-            ========================== */
-            if (!interaction.isButton()) return;
+            /* ================= BUTTONS ================= */
+            if (interaction.isButton()) {
 
-            const exchangeTypes = ['cashapp', 'paypal', 'crypto'];
+                const exchangeTypes = ['cashapp', 'paypal', 'crypto'];
 
-            if (exchangeTypes.includes(interaction.customId)) {
+                if (exchangeTypes.includes(interaction.customId)) {
+
+                    const modal = new ModalBuilder()
+                        .setCustomId(`modal_${interaction.customId}`)
+                        .setTitle('Exchange Details');
+
+                    const amountInput = new TextInputBuilder()
+                        .setCustomId('amount')
+                        .setLabel('Amount')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const detailsInput = new TextInputBuilder()
+                        .setCustomId('details')
+                        .setLabel('Exchange Details')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true);
+
+                    const row1 = new ActionRowBuilder().addComponents(amountInput);
+                    const row2 = new ActionRowBuilder().addComponents(detailsInput);
+
+                    modal.addComponents(row1, row2);
+
+                    await interaction.showModal(modal);
+                }
+
+                if (interaction.customId === 'claim_ticket') {
+                    await interaction.reply({ content: `📌 Claimed by ${interaction.user}` });
+                }
+
+                if (interaction.customId === 'close_ticket') {
+                    await interaction.reply({ content: "🔒 Closing..." });
+                    setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
+                }
+            }
+
+            /* ================= MODAL SUBMIT ================= */
+            if (interaction.isModalSubmit()) {
+
+                if (!interaction.customId.startsWith('modal_')) return;
+
+                const exchangeType = interaction.customId.replace('modal_', '');
+                const amount = interaction.fields.getTextInputValue('amount');
+                const details = interaction.fields.getTextInputValue('details');
 
                 await interaction.deferReply({ ephemeral: true });
 
                 const channel = await interaction.guild.channels.create({
-                    name: `${interaction.customId}-${interaction.user.username}`,
+                    name: `${exchangeType}-${interaction.user.username}`,
                     type: ChannelType.GuildText,
                     parent: TICKET_CATEGORY_ID,
                     permissionOverwrites: [
@@ -66,31 +107,26 @@ module.exports = {
                     ],
                 });
 
+                const embed = new EmbedBuilder()
+                    .setTitle("💱 Exchange Ticket")
+                    .setColor("Green")
+                    .addFields(
+                        { name: "User", value: `${interaction.user}`, inline: true },
+                        { name: "Type", value: exchangeType.toUpperCase(), inline: true },
+                        { name: "Amount", value: amount },
+                        { name: "Details", value: details }
+                    );
+
                 const controlRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('claim_ticket')
                         .setLabel('📌 Claim')
                         .setStyle(ButtonStyle.Primary),
-
-                    new ButtonBuilder()
-                        .setCustomId('complete_ticket')
-                        .setLabel('💰 Complete')
-                        .setStyle(ButtonStyle.Success),
-
                     new ButtonBuilder()
                         .setCustomId('close_ticket')
                         .setLabel('🔒 Close')
                         .setStyle(ButtonStyle.Danger)
                 );
-
-                const embed = new EmbedBuilder()
-                    .setTitle("💱 Exchange Ticket")
-                    .setDescription(
-                        `**Exchange Type:** ${interaction.customId.toUpperCase()}\n` +
-                        `User: ${interaction.user}\n\n` +
-                        `Staff will assist shortly.`
-                    )
-                    .setColor("Green");
 
                 await channel.send({
                     content: `<@&${STAFF_ROLE_ID}>`,
@@ -101,47 +137,6 @@ module.exports = {
                 await interaction.editReply({
                     content: `✅ Ticket created: ${channel}`
                 });
-            }
-
-            /* ===== CLAIM ===== */
-            if (interaction.customId === 'claim_ticket') {
-                await interaction.reply({
-                    content: `📌 Ticket claimed by ${interaction.user}`
-                });
-            }
-
-            /* ===== COMPLETE ===== */
-            if (interaction.customId === 'complete_ticket') {
-
-                await interaction.reply({
-                    content: `💰 Exchange marked completed by ${interaction.user}`
-                });
-
-                const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-
-                if (logChannel) {
-                    const logEmbed = new EmbedBuilder()
-                        .setTitle("✅ Exchange Completed")
-                        .setDescription(
-                            `Ticket: ${interaction.channel}\nCompleted by: ${interaction.user}`
-                        )
-                        .setColor("Blue")
-                        .setTimestamp();
-
-                    await logChannel.send({ embeds: [logEmbed] });
-                }
-            }
-
-            /* ===== CLOSE ===== */
-            if (interaction.customId === 'close_ticket') {
-
-                await interaction.reply({
-                    content: "🔒 Closing ticket in 5 seconds..."
-                });
-
-                setTimeout(() => {
-                    interaction.channel.delete().catch(() => {});
-                }, 5000);
             }
 
         } catch (error) {
