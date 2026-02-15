@@ -34,15 +34,14 @@ module.exports = {
             ========================== */
             if (!interaction.isButton()) return;
 
-            console.log("Button clicked:", interaction.customId);
+            const exchangeTypes = ['cashapp', 'paypal', 'crypto'];
 
-            /* ===== OPEN TICKET ===== */
-            if (interaction.customId === 'open_ticket') {
+            if (exchangeTypes.includes(interaction.customId)) {
 
                 await interaction.deferReply({ ephemeral: true });
 
                 const channel = await interaction.guild.channels.create({
-                    name: `exchange-${interaction.user.username}`,
+                    name: `${interaction.customId}-${interaction.user.username}`,
                     type: ChannelType.GuildText,
                     parent: TICKET_CATEGORY_ID,
                     permissionOverwrites: [
@@ -67,7 +66,7 @@ module.exports = {
                     ],
                 });
 
-                const row = new ActionRowBuilder().addComponents(
+                const controlRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId('claim_ticket')
                         .setLabel('📌 Claim')
@@ -86,13 +85,17 @@ module.exports = {
 
                 const embed = new EmbedBuilder()
                     .setTitle("💱 Exchange Ticket")
-                    .setDescription(`User: ${interaction.user}\n\nStaff will assist you shortly.`)
+                    .setDescription(
+                        `**Exchange Type:** ${interaction.customId.toUpperCase()}\n` +
+                        `User: ${interaction.user}\n\n` +
+                        `Staff will assist shortly.`
+                    )
                     .setColor("Green");
 
                 await channel.send({
                     content: `<@&${STAFF_ROLE_ID}>`,
                     embeds: [embed],
-                    components: [row]
+                    components: [controlRow]
                 });
 
                 await interaction.editReply({
@@ -102,7 +105,6 @@ module.exports = {
 
             /* ===== CLAIM ===== */
             if (interaction.customId === 'claim_ticket') {
-
                 await interaction.reply({
                     content: `📌 Ticket claimed by ${interaction.user}`
                 });
