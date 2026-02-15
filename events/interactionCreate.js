@@ -16,131 +16,141 @@ module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction, client) {
 
-        // SLASH COMMANDS (important or they fail)
-        if (interaction.isChatInputCommand()) {
-            const command = client.commands.get(interaction.commandName);
-            if (!command) return;
+        try {
 
-            try {
+            /* =========================
+               SLASH COMMANDS
+            ========================== */
+            if (interaction.isChatInputCommand()) {
+                const command = client.commands.get(interaction.commandName);
+                if (!command) return;
+
                 await command.execute(interaction, client);
-            } catch (error) {
-                console.error(error);
-                if (!interaction.replied) {
-                    await interaction.reply({ content: '❌ Error executing command.', ephemeral: true });
+                return;
+            }
+
+            /* =========================
+               BUTTONS
+            ========================== */
+            if (!interaction.isButton()) return;
+
+            console.log("Button clicked:", interaction.customId);
+
+            /* ===== OPEN TICKET ===== */
+            if (interaction.customId === 'open_ticket') {
+
+                await interaction.deferReply({ ephemeral: true });
+
+                const channel = await interaction.guild.channels.create({
+                    name: `exchange-${interaction.user.username}`,
+                    type: ChannelType.GuildText,
+                    parent: TICKET_CATEGORY_ID,
+                    permissionOverwrites: [
+                        {
+                            id: interaction.guild.roles.everyone,
+                            deny: [PermissionsBitField.Flags.ViewChannel],
+                        },
+                        {
+                            id: interaction.user.id,
+                            allow: [
+                                PermissionsBitField.Flags.ViewChannel,
+                                PermissionsBitField.Flags.SendMessages
+                            ],
+                        },
+                        {
+                            id: STAFF_ROLE_ID,
+                            allow: [
+                                PermissionsBitField.Flags.ViewChannel,
+                                PermissionsBitField.Flags.SendMessages
+                            ],
+                        },
+                    ],
+                });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('claim_ticket')
+                        .setLabel('📌 Claim')
+                        .setStyle(ButtonStyle.Primary),
+
+                    new ButtonBuilder()
+                        .setCustomId('complete_ticket')
+                        .setLabel('💰 Complete')
+                        .setStyle(ButtonStyle.Success),
+
+                    new ButtonBuilder()
+                        .setCustomId('close_ticket')
+                        .setLabel('🔒 Close')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                const embed = new EmbedBuilder()
+                    .setTitle("💱 Exchange Ticket")
+                    .setDescription(`User: ${interaction.user}\n\nStaff will assist you shortly.`)
+                    .setColor("Green");
+
+                await channel.send({
+                    content: `<@&${STAFF_ROLE_ID}>`,
+                    embeds: [embed],
+                    components: [row]
+                });
+
+                await interaction.editReply({
+                    content: `✅ Ticket created: ${channel}`
+                });
+            }
+
+            /* ===== CLAIM ===== */
+            if (interaction.customId === 'claim_ticket') {
+
+                await interaction.reply({
+                    content: `📌 Ticket claimed by ${interaction.user}`
+                });
+            }
+
+            /* ===== COMPLETE ===== */
+            if (interaction.customId === 'complete_ticket') {
+
+                await interaction.reply({
+                    content: `💰 Exchange marked completed by ${interaction.user}`
+                });
+
+                const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle("✅ Exchange Completed")
+                        .setDescription(
+                            `Ticket: ${interaction.channel}\nCompleted by: ${interaction.user}`
+                        )
+                        .setColor("Blue")
+                        .setTimestamp();
+
+                    await logChannel.send({ embeds: [logEmbed] });
                 }
             }
-        }
 
-        // BUTTONS
-        if (!interaction.isButton()) return;
+            /* ===== CLOSE ===== */
+            if (interaction.customId === 'close_ticket') {
 
-        /* =========================
-           OPEN TICKET BUTTON
-        ========================== */
+                await interaction.reply({
+                    content: "🔒 Closing ticket in 5 seconds..."
+                });
 
-        if (interaction.customId === 'open_ticket') {
-
-            await interaction.deferReply({ ephemeral: true });
-
-            const channel = await interaction.guild.channels.create({
-                name: `exchange-${interaction.user.username}`,
-                type: ChannelType.GuildText,
-                parent: TICKET_CATEGORY_ID,
-                permissionOverwrites: [
-                    {
-                        id: interaction.guild.roles.everyone,
-                        deny: [PermissionsBitField.Flags.ViewChannel],
-                    },
-                    {
-                        id: interaction.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    },
-                    {
-                        id: STAFF_ROLE_ID,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    },
-                ],
-            });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('claim_ticket')
-                    .setLabel('📌 Claim')
-                    .setStyle(ButtonStyle.Primary),
-
-                new ButtonBuilder()
-                    .setCustomId('complete_ticket')
-                    .setLabel('💰 Complete')
-                    .setStyle(ButtonStyle.Success),
-
-                new ButtonBuilder()
-                    .setCustomId('close_ticket')
-                    .setLabel('🔒 Close')
-                    .setStyle(ButtonStyle.Danger)
-            );
-
-            const embed = new EmbedBuilder()
-                .setTitle("💱 Exchange Ticket Opened")
-                .setDescription(`User: ${interaction.user}\n\nPlease provide exchange details below.`)
-                .setColor("Green");
-
-            await channel.send({
-                content: `<@&${STAFF_ROLE_ID}>`,
-                embeds: [embed],
-                components: [row]
-            });
-
-            await interaction.editReply({
-                content: `✅ Your ticket has been created: ${channel}`
-            });
-        }
-
-        /* =========================
-           CLAIM BUTTON
-        ========================== */
-
-        if (interaction.customId === 'claim_ticket') {
-            await interaction.reply({
-                content: `📌 Ticket claimed by ${interaction.user}`
-            });
-        }
-
-        /* =========================
-           COMPLETE BUTTON
-        ========================== */
-
-        if (interaction.customId === 'complete_ticket') {
-
-            await interaction.reply({
-                content: `💰 Exchange marked as completed by ${interaction.user}`
-            });
-
-            const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-
-            if (logChannel) {
-                const logEmbed = new EmbedBuilder()
-                    .setTitle("✅ Exchange Completed")
-                    .setDescription(`Ticket: ${interaction.channel}\nCompleted by: ${interaction.user}`)
-                    .setColor("Blue")
-                    .setTimestamp();
-
-                await logChannel.send({ embeds: [logEmbed] });
+                setTimeout(() => {
+                    interaction.channel.delete().catch(() => {});
+                }, 5000);
             }
-        }
 
-        /* =========================
-           CLOSE BUTTON
-        ========================== */
+        } catch (error) {
+            console.error("INTERACTION ERROR:", error);
 
-        if (interaction.customId === 'close_ticket') {
-
-            await interaction.reply({
-                content: "🔒 Closing ticket in 5 seconds..."
-            });
-
-            setTimeout(() => {
-                interaction.channel.delete().catch(() => {});
-            }, 5000);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: "❌ Something went wrong.",
+                    ephemeral: true
+                });
+            }
         }
     },
 };
