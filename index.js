@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
-require('dotenv').config();
 
 const { startDailyLeaderboard } = require('./utils/dailyLeaderboard');
 
@@ -16,25 +15,29 @@ client.commands = new Collection();
 
 
 // 🔹 Load Commands
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+if (fs.existsSync('./commands')) {
+    const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
-    if (command.data && command.execute) {
-        client.commands.set(command.data.name, command);
+    for (const file of commandFiles) {
+        const command = require(`./commands/${file}`);
+        if (command.data && command.execute) {
+            client.commands.set(command.data.name, command);
+        }
     }
 }
 
 
 // 🔹 Load Events
-const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
+if (fs.existsSync('./events')) {
+    const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
 
-for (const file of eventFiles) {
-    const event = require(`./events/${file}`);
-    if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-        client.on(event.name, (...args) => event.execute(...args, client));
+    for (const file of eventFiles) {
+        const event = require(`./events/${file}`);
+        if (event.once) {
+            client.once(event.name, (...args) => event.execute(...args, client));
+        } else {
+            client.on(event.name, (...args) => event.execute(...args, client));
+        }
     }
 }
 
